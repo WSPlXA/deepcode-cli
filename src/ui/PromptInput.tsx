@@ -70,7 +70,7 @@ export type PromptSubmission = {
   selectedSkills?: SkillInfo[];
   permissions?: UserToolPermission[];
   alwaysAllows?: PermissionScope[];
-  command?: "new" | "resume" | "continue" | "undo" | "mcp" | "exit";
+  command?: "new" | "resume" | "continue" | "undo" | "mcp" | "install" | "exit";
 };
 
 export type PromptDraft = {
@@ -783,6 +783,15 @@ export const PromptInput = React.memo(function PromptInput({
     if (item.kind === "mcp") {
       onSubmit({ text: "/mcp", imageUrls: [], command: "mcp" });
       resetPromptInput();
+      return;
+    }
+    if (item.kind === "install") {
+      onSubmit({ text: "/install", imageUrls: [], command: "install" });
+      setBuffer(EMPTY_BUFFER);
+      clearUndoRedoStacks();
+      setImageUrls([]);
+      setSelectedSkills([]);
+      setShowSkillsDropdown(false);
       return;
     }
     if (item.kind === "exit") {

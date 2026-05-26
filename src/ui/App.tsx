@@ -43,6 +43,12 @@ import { PermissionPrompt, type PermissionPromptResult } from "./PermissionPromp
 import { buildExitSummaryText } from "./exitSummary";
 import { RawMode, useRawModeContext } from "./contexts";
 import { renderMessageToStdout } from "./components/MessageView/utils";
+import {
+  formatBashToolInstallResult,
+  getBashToolingStatus,
+  installMissingBashTools,
+  type BashToolingStatus,
+} from "../common/bash-tooling";
 import { renderRawModeMessages } from "./utils";
 import { ANSI_CLEAR_SCREEN } from "./constants";
 
@@ -91,6 +97,7 @@ function App({ projectRoot, initialPrompt, onRestart }: AppProps): React.ReactEl
   const [showWelcome, setShowWelcome] = useState(true);
   const [welcomeNonce, setWelcomeNonce] = useState(0);
   const [resolvedSettings, setResolvedSettings] = useState(() => resolveCurrentSettings(projectRoot));
+  const [bashToolingStatus, setBashToolingStatus] = useState<BashToolingStatus>(() => getBashToolingStatus());
   const [nowTick, setNowTick] = useState(0);
   const [mcpStatuses, setMcpStatuses] = useState<ReturnType<typeof sessionManager.getMcpStatus>>([]);
   const [showProcessStdout, setShowProcessStdout] = useState(false);
@@ -299,6 +306,28 @@ function App({ projectRoot, initialPrompt, onRestart }: AppProps): React.ReactEl
       if (submission.command === "mcp") {
         setMcpStatuses(sessionManager.getMcpStatus());
         navigateToSubView("mcp-status");
+        return;
+      }
+      if (submission.command === "install") {
+        setBusy(true);
+        setErrorLine(null);
+        setStatusLine("Installing missing Bash tools...");
+        try {
+          const result = await installMissingBashTools();
+          setBashToolingStatus(result.after);
+          setWelcomeNonce((n) => n + 1);
+          setMessages((prev) => [...prev, buildSyntheticSystemMessage(formatBashToolInstallResult(result))]);
+          if (result.after.missing.length === 0) {
+            setStatusLine("Bash tools ready: rg+jq");
+          } else {
+            setStatusLine(`Bash tools still missing: ${result.after.missing.join(",")}`);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setErrorLine(message);
+        } finally {
+          setBusy(false);
+        }
         return;
       }
 
@@ -707,6 +736,7 @@ function App({ projectRoot, initialPrompt, onRestart }: AppProps): React.ReactEl
                 projectRoot={projectRoot}
                 settings={resolvedSettings}
                 skills={skills}
+                bashToolingStatus={bashToolingStatus}
                 width={screenWidth}
               />
             );
@@ -832,6 +862,22 @@ function buildSyntheticUserMessage(content: string, imageCount: number): Session
             image_url: { url: "" },
           }))
         : null,
+    messageParams: null,
+    compacted: false,
+    visible: true,
+    createTime: now,
+    updateTime: now,
+  };
+}
+
+function buildSyntheticSystemMessage(content: string): SessionMessage {
+  const now = new Date().toISOString();
+  return {
+    id: `local-system-${Math.random().toString(36).slice(2)}`,
+    sessionId: "local",
+    role: "system",
+    content,
+    contentParams: null,
     messageParams: null,
     compacted: false,
     visible: true,
